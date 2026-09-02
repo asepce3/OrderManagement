@@ -5,25 +5,46 @@ namespace OrderManagement.Mappings;
 
 public static class OrderMapper
 {
-    public static Order ToEntity(this CreateOrderDto dto)
+    public static OrderDetail ToEntity(this CreateOrderItemDto dto, decimal price)
     {
-        return new Order
+        return new OrderDetail
         {
             Id = Guid.NewGuid(),
-            CustomerName = dto.CustomerName,
-            ProductName = dto.ProductName,
-            Quantity = dto.Quantity,
-            Price = dto.Price,
+            ProductId = dto.ProductId,
+            Qty = dto.Qty,
+            Price = price,
             CreatedAt = DateTime.UtcNow
         };
     }
 
-    public static void UpdateEntity(this UpdateOrderDto dto, Order order)
+    public static Order ToOrderEntity(this CreateOrderDto dto, int userId, decimal totalPrice, List<OrderDetail> details)
     {
-        order.CustomerName = dto.CustomerName;
-        order.ProductName = dto.ProductName;
-        order.Quantity = dto.Quantity;
-        order.Price = dto.Price;
+        var order = new Order
+        {
+            Id = Guid.NewGuid(),
+            Status = OrderStatus.Pending,
+            TotalPrice = totalPrice,
+            UserId = userId,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            CreatedBy = userId,
+            UpdatedBy = userId
+        };
+
+        foreach (var detail in details)
+        {
+            detail.OrderId = order.Id;
+            order.OrderDetails.Add(detail);
+        }
+
+        return order;
+    }
+
+    public static void UpdateEntity(this UpdateOrderDto dto, Order order, int updatedBy)
+    {
+        order.Status = dto.Status;
+        order.UpdatedAt = DateTime.UtcNow;
+        order.UpdatedBy = updatedBy;
     }
 
     public static OrderResponseDto ToResponseDto(this Order order)
@@ -31,11 +52,23 @@ public static class OrderMapper
         return new OrderResponseDto
         {
             Id = order.Id,
-            CustomerName = order.CustomerName,
-            ProductName = order.ProductName,
-            Quantity = order.Quantity,
-            Price = order.Price,
-            CreatedAt = order.CreatedAt
+            Status = order.Status,
+            TotalPrice = order.TotalPrice,
+            UserId = order.UserId,
+            CreatedAt = order.CreatedAt,
+            Items = order.OrderDetails.Select(d => d.ToResponseDto()).ToList()
+        };
+    }
+
+    public static OrderDetailResponseDto ToResponseDto(this OrderDetail detail)
+    {
+        return new OrderDetailResponseDto
+        {
+            Id = detail.Id,
+            ProductId = detail.ProductId,
+            ProductName = detail.Product?.Name ?? string.Empty,
+            Qty = detail.Qty,
+            Price = detail.Price
         };
     }
 }
