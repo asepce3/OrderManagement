@@ -69,6 +69,7 @@ public class AuthService : IAuthService
                 Email = dto.Email,
                 Name = dto.Name,
                 Address = dto.Address,
+                Role = UserRoles.User,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
             };
@@ -95,6 +96,52 @@ public class AuthService : IAuthService
         }
     }
 
+    public async Task<Result<RegisterResponseDto?>> CreateAdminAsync(CreateAdminRequestDto dto)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(dto.Email))
+                return Result<RegisterResponseDto?>.Failure("Email is required.", StatusCodes.Status400BadRequest);
+
+            if (string.IsNullOrWhiteSpace(dto.Password) || dto.Password.Length < 6)
+                return Result<RegisterResponseDto?>.Failure("Password must be at least 6 characters.", StatusCodes.Status400BadRequest);
+
+            var existingUser = await _userRepository.GetUserByEmailAsync(dto.Email);
+            if (existingUser != null)
+                return Result<RegisterResponseDto?>.Failure("Email already registered.", StatusCodes.Status409Conflict);
+
+            var user = new User
+            {
+                Email = dto.Email,
+                Name = dto.Name,
+                Address = dto.Address,
+                Role = UserRoles.Admin,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow
+            };
+
+            user.Password = _passwordHasher.HashPassword(user, dto.Password);
+
+            await _unitOfWork.BeginTransactionAsync();
+            await _userRepository.SaveUserAsync(user);
+            await _unitOfWork.CommitAsync();
+
+            return Result<RegisterResponseDto?>.Success(null);
+        }
+        catch (ConflictException e)
+        {
+            await _unitOfWork.RollbackAsync();
+            Console.Write(e);
+            return Result<RegisterResponseDto?>.Failure("Email already registered.", StatusCodes.Status409Conflict);
+        }
+        catch (Exception e)
+        {
+            await _unitOfWork.RollbackAsync();
+            Console.Write(e);
+            return Result<RegisterResponseDto?>.Failure("An unexpected error occurred while creating admin.", StatusCodes.Status500InternalServerError);
+        }
+    }
+
     private LoginResponseDto GenerateToken(User user)
     {
         var jwtSettings = _configuration.GetSection("Jwt");
@@ -107,8 +154,7 @@ public class AuthService : IAuthService
         var claims = new[]
         {
             new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email),
-            new Claim(JwtRegisteredClaimNames.Name, user.Name),
+            new Claim(ClaimTypes.Role, user.Role),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 

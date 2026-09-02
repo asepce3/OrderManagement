@@ -1,6 +1,8 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using OrderManagement.Common;
 using OrderManagement.DTOs;
+using OrderManagement.Models;
 using OrderManagement.Services;
 
 namespace OrderManagement.Controllers;
@@ -34,5 +36,16 @@ public class AuthController : ControllerBase
             return StatusCode(result.Code, ApiResponse<RegisterResponseDto>.ErrorResponse(result.Error!));
 
         return Ok(ApiResponse<RegisterResponseDto>.SuccessResponse(result.Data!));
+    }
+
+    [HttpPost("admin")]
+    [Authorize(Roles = UserRoles.Admin)]
+    public async Task<ActionResult<ApiResponse<RegisterResponseDto>>> CreateAdmin(CreateAdminRequestDto dto)
+    {
+        var result = await _authService.CreateAdminAsync(dto);
+        if (result.IsFailure)
+            return StatusCode(result.Code, ApiResponse<RegisterResponseDto>.ErrorResponse(result.Error!));
+
+        return Ok(ApiResponse<RegisterResponseDto>.SuccessResponse(result.Data!, "Admin created successfully."));
     }
 }

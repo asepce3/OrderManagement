@@ -33,6 +33,7 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Name).IsRequired().HasMaxLength(200);
             entity.Property(e => e.Address).IsRequired().HasMaxLength(500);
             entity.Property(e => e.Password).IsRequired().HasMaxLength(255);
+            entity.Property(e => e.Role).IsRequired().HasMaxLength(50).HasDefaultValue("User");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
         });
