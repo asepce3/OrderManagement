@@ -106,7 +106,7 @@ public class OrderService : IOrderService
 
             await _unitOfWork.CommitAsync();
 
-            return Result<OrderResponseDto>.Success(createdOrder.ToResponseDto());
+            return Result<OrderResponseDto>.Success(createdOrder.ToResponseDto(), code: StatusCodes.Status201Created);
         }
         catch (Exception e)
         {

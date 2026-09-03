@@ -14,10 +14,12 @@ namespace OrderManagement.Controllers;
 public class OrdersController : ControllerBase
 {
     private readonly IOrderService _orderService;
+    private readonly IIdempotencyService _idempotencyService;
 
-    public OrdersController(IOrderService orderService)
+    public OrdersController(IOrderService orderService, IIdempotencyService idempotencyService)
     {
         _orderService = orderService ?? throw new ArgumentNullException(nameof(orderService));
+        _idempotencyService = idempotencyService ?? throw new ArgumentNullException(nameof(idempotencyService));
     }
 
     [HttpGet]
@@ -28,7 +30,7 @@ public class OrdersController : ControllerBase
         if (role == null || userId == null)
             return Unauthorized(ApiResponse<OrderResponseDto>.ErrorResponse("User not authenticated."));
         var result = await _orderService.GetAllAsync((int)userId, role, request);
-        return Ok(ApiResponse<IEnumerable<OrderResponseDto>>.SuccessResponse(result.Data!));
+        return StatusCode(result.Code, ApiResponse<IEnumerable<OrderResponseDto>>.SuccessResponse(result.Data!));
     }
 
     [HttpGet("{id:guid}")]
@@ -42,21 +44,27 @@ public class OrdersController : ControllerBase
         if (result.IsFailure)
             return StatusCode(result.Code, ApiResponse<OrderResponseDto>.ErrorResponse(result.Error!));
 
-        return Ok(ApiResponse<OrderResponseDto>.SuccessResponse(result.Data!));
+        return StatusCode(result.Code, ApiResponse<OrderResponseDto>.SuccessResponse(result.Data!));
     }
 
     [HttpPost]
-    public async Task<ActionResult<ApiResponse<OrderResponseDto>>> Create(CreateOrderDto dto)
+    public async Task<ActionResult<ApiResponse<OrderResponseDto>>> Create(
+        [FromHeader(Name = "Idempotency-Key")] string idempotencyKey,
+        CreateOrderDto dto)
     {
         var userId = GetUserId();
         if (userId == null)
             return Unauthorized(ApiResponse<OrderResponseDto>.ErrorResponse("User not authenticated."));
 
-        var result = await _orderService.CreateAsync(dto, userId.Value);
+        var result = await _idempotencyService.ProcessAsync(idempotencyKey, dto, async () =>
+        {
+            return await _orderService.CreateAsync(dto, userId.Value);
+        });
+
         if (result.IsFailure)
             return StatusCode(result.Code, ApiResponse<OrderResponseDto>.ErrorResponse(result.Error!));
 
-        return Ok(ApiResponse<OrderResponseDto>.SuccessResponse(result.Data!));
+        return StatusCode(result.Code, ApiResponse<OrderResponseDto>.SuccessResponse(result.Data!));
     }
 
     [HttpPut("status/{id:guid}")]
@@ -72,7 +80,7 @@ public class OrdersController : ControllerBase
         if (result.IsFailure)
             return StatusCode(result.Code, ApiResponse<OrderResponseDto>.ErrorResponse(result.Error!));
 
-        return Ok(ApiResponse<OrderResponseDto>.SuccessResponse(result.Data!));
+        return StatusCode(result.Code, ApiResponse<OrderResponseDto>.SuccessResponse(result.Data!));
     }
 
     private int? GetUserId()
