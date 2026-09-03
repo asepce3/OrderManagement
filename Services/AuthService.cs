@@ -1,4 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Net.Mail;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Identity;
@@ -57,6 +58,9 @@ public class AuthService : IAuthService
             if (string.IsNullOrWhiteSpace(dto.Email))
                 return Result<RegisterResponseDto?>.Failure("Email is required.", StatusCodes.Status400BadRequest);
 
+            if (!IsEmailValid(dto.Email))
+                return Result<RegisterResponseDto?>.Failure("Invalid email address.", StatusCodes.Status400BadRequest);
+
             if (string.IsNullOrWhiteSpace(dto.Password) || dto.Password.Length < 6)
                 return Result<RegisterResponseDto?>.Failure("Password must be at least 6 characters.", StatusCodes.Status400BadRequest);
 
@@ -96,12 +100,27 @@ public class AuthService : IAuthService
         }
     }
 
+    private static bool IsEmailValid(string email)
+    {
+        try
+        {
+            var emailAddress = new MailAddress(email);
+            return emailAddress.Address == email;
+        } catch (Exception)
+        {
+            return false;
+        }
+    }
+
     public async Task<Result<RegisterResponseDto?>> CreateAdminAsync(CreateAdminRequestDto dto)
     {
         try
         {
             if (string.IsNullOrWhiteSpace(dto.Email))
                 return Result<RegisterResponseDto?>.Failure("Email is required.", StatusCodes.Status400BadRequest);
+
+            if (!IsEmailValid(dto.Email))
+                return Result<RegisterResponseDto?>.Failure("Invalid email address.", StatusCodes.Status400BadRequest);
 
             if (string.IsNullOrWhiteSpace(dto.Password) || dto.Password.Length < 6)
                 return Result<RegisterResponseDto?>.Failure("Password must be at least 6 characters.", StatusCodes.Status400BadRequest);

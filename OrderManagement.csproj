@@ -25,4 +25,16 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="8.1.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="OrderManagement.Tests\**" />
+    <EmbeddedResource Remove="OrderManagement.Tests\**" />
+    <Content Remove="OrderManagement.Tests\**" />
+    <None Remove="OrderManagement.Tests\**" />
+
+    <Compile Remove="OrderManagement.IntegrationTests\**" />
+    <EmbeddedResource Remove="OrderManagement.IntegrationTests\**" />
+    <Content Remove="OrderManagement.IntegrationTests\**" />
+    <None Remove="OrderManagement.IntegrationTests\**" />
+  </ItemGroup>
+
 </Project>
