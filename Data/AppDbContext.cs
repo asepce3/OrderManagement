@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<OrderDetail> OrderDetails => Set<OrderDetail>();
     public DbSet<User> Users => Set<User>();
     public DbSet<Product> Products => Set<Product>();
+    public DbSet<LogEntry> LogEntries => Set<LogEntry>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -69,6 +70,22 @@ public class AppDbContext : DbContext
             entity.Property(e => e.Role).IsRequired().HasMaxLength(50).HasDefaultValue("User");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+        });
+
+        modelBuilder.Entity<LogEntry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.HasIndex(e => e.CorrelationId);
+            entity.HasIndex(e => e.Timestamp);
+            entity.HasIndex(e => e.Level);
+            entity.Property(e => e.CorrelationId).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Level).IsRequired().HasMaxLength(50);
+            entity.Property(e => e.Message).IsRequired();
+            entity.Property(e => e.SourceContext).IsRequired().HasMaxLength(500);
+            entity.Property(e => e.RequestPath).HasMaxLength(500);
+            entity.Property(e => e.HttpMethod).HasMaxLength(10);
+            entity.Property(e => e.MachineName).IsRequired().HasMaxLength(100);
+            entity.Property(e => e.Properties).HasColumnType("jsonb");
         });
     }
 }

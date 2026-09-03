@@ -8,13 +8,39 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using OrderManagement.Common;
 using OrderManagement.Data;
+using OrderManagement.Logging;
+using OrderManagement.Middleware;
 using OrderManagement.Models;
 using OrderManagement.Redis;
 using OrderManagement.Repositories;
 using OrderManagement.Services;
+using Serilog;
 using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure Serilog
+builder.Host.UseSerilog((context, services, configuration) =>
+{
+    configuration
+        .Enrich.FromLogContext()
+        .Enrich.WithMachineName()
+        .Enrich.WithProcessId()
+        .Enrich.WithThreadId()
+        .Filter.ByIncludingOnly(ev => ev.Properties.ContainsKey("CorrelationId"))
+        .WriteTo.Console(
+            outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{CorrelationId}] [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+        .WriteTo.File(
+            path: "logs/order-management-.log",
+            rollingInterval: RollingInterval.Day,
+            retainedFileCountLimit: 7,
+            outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz}] [{CorrelationId}] [{Level:u3}] {Message:lj}{NewLine}{Exception}")
+        .WriteTo.Conditional(
+            ev => ev.Properties.ContainsKey("CorrelationId")
+                && ev.Properties.TryGetValue("SourceContext", out var sourceContext)
+                && sourceContext.ToString().StartsWith("\"OrderManagement", StringComparison.OrdinalIgnoreCase),
+            wt => wt.EntityFramework(services));
+});
 
 // Add services to the container.
 builder.Services.AddControllers();
@@ -142,8 +168,17 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseSerilogRequestLogging(options =>
+{
+    options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+    {
+        diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value ?? "unknown");
+        diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
+    };
+});
 app.MapControllers();
 
 app.Run();

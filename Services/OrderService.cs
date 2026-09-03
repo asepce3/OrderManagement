@@ -12,12 +12,14 @@ public class OrderService : IOrderService
     private readonly IOrderRepository _orderRepository;
     private readonly IProductRepository _productRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ILogger<OrderService> _logger;
 
-    public OrderService(IOrderRepository orderRepository, IProductRepository productRepository, IUnitOfWork unitOfWork)
+    public OrderService(IOrderRepository orderRepository, IProductRepository productRepository, IUnitOfWork unitOfWork, ILogger<OrderService> logger)
     {
         _orderRepository = orderRepository ?? throw new ArgumentNullException(nameof(orderRepository));
         _productRepository = productRepository ?? throw new ArgumentNullException(nameof(productRepository));
         _unitOfWork = unitOfWork ?? throw new ArgumentNullException(nameof(unitOfWork));
+        _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     private static readonly Dictionary<string, string[]> AllowedTransitions = new()
@@ -61,11 +63,19 @@ public class OrderService : IOrderService
 
     public async Task<Result<OrderResponseDto>> CreateAsync(CreateOrderDto dto, int userId)
     {
+        _logger.LogInformation("Creating order for user {UserId} with {ItemCount} items", userId, dto.Items?.Count ?? 0);
+
         if (dto.Items == null || dto.Items.Count == 0)
+        {
+            _logger.LogWarning("Create order failed for user {UserId}: order items are required", userId);
             return Result<OrderResponseDto>.Failure("Order items are required.", StatusCodes.Status400BadRequest);
+        }
 
         if (dto.Items.Any(i => i.Qty <= 0))
+        {
+            _logger.LogWarning("Create order failed for user {UserId}: quantity must be greater than zero", userId);
             return Result<OrderResponseDto>.Failure("Quantity must be greater than zero.", StatusCodes.Status400BadRequest);
+        }
 
         try
         {
@@ -83,12 +93,14 @@ public class OrderService : IOrderService
                 var exists = mapOfProducts.TryGetValue(item.ProductId, out var product);
                 if (!exists || product == null)
                 {
+                    _logger.LogWarning("Create order failed for user {UserId}: product {ProductId} not found", userId, item.ProductId);
                     await _unitOfWork.RollbackAsync();
                     return Result<OrderResponseDto>.Failure($"Product with id '{item.ProductId}' not found.", StatusCodes.Status404NotFound);
                 }
 
                 if (product.StockQty < item.Qty)
                 {
+                    _logger.LogWarning("Create order failed for user {UserId}: insufficient stock for product {ProductId}", userId, item.ProductId);
                     await _unitOfWork.RollbackAsync();
                     return Result<OrderResponseDto>.Failure($"Insufficient stock for product '{product.Name}'.", StatusCodes.Status400BadRequest);
                 }
@@ -106,20 +118,24 @@ public class OrderService : IOrderService
 
             await _unitOfWork.CommitAsync();
 
+            _logger.LogInformation("Order {OrderId} created successfully for user {UserId} with total price {TotalPrice}", createdOrder.Id, userId, createdOrder.TotalPrice);
             return Result<OrderResponseDto>.Success(createdOrder.ToResponseDto(), code: StatusCodes.Status201Created);
         }
         catch (Exception e)
         {
             await _unitOfWork.RollbackAsync();
-            Console.Write(e);
+            _logger.LogError(e, "Failed to create order for user {UserId}", userId);
             return Result<OrderResponseDto>.Failure("Failed to create order.", StatusCodes.Status500InternalServerError);
         }
     }
 
     public async Task<Result<OrderResponseDto>> UpdateStatusAsync(Guid id, UpdateOrderDto dto, int updatedBy, string role)
     {
+        _logger.LogInformation("Updating status of order {OrderId} to {NewStatus} by user {UpdatedBy}", id, dto.Status, updatedBy);
+
         if (role != UserRoles.Admin)
         {
+            _logger.LogWarning("User {UpdatedBy} attempted to update order {OrderId} status without admin role", updatedBy, id);
             return Result<OrderResponseDto>.Failure("You do not have permission to access this resource.", StatusCodes.Status403Forbidden);
         }
 
@@ -130,12 +146,14 @@ public class OrderService : IOrderService
             var order = await _orderRepository.GetByIdForUpdateAsync(id);
             if (order == null)
             {
+                _logger.LogWarning("Update status failed: order {OrderId} not found", id);
                 await _unitOfWork.RollbackAsync();
                 return Result<OrderResponseDto>.Failure("Order not found.", StatusCodes.Status404NotFound);
             }
 
             if(!IsStatusUpdateAllowed(order.Status, dto.Status))
             {
+                _logger.LogWarning("Update status failed for order {OrderId}: invalid transition from {CurrentStatus} to {NewStatus}", id, order.Status, dto.Status);
                 await _unitOfWork.RollbackAsync();
                 return Result<OrderResponseDto>.Failure($"Invalid status transition from '{order.Status}' to '{dto.Status}'.", StatusCodes.Status400BadRequest);
             }
@@ -168,12 +186,13 @@ public class OrderService : IOrderService
 
             await _unitOfWork.CommitAsync();
 
+            _logger.LogInformation("Order {OrderId} status updated to {NewStatus} by user {UpdatedBy}", id, dto.Status, updatedBy);
             return Result<OrderResponseDto>.Success(order.ToResponseDto());
         }
         catch (Exception e)
         {
             await _unitOfWork.RollbackAsync();
-            Console.Write(e);
+            _logger.LogError(e, "Failed to update status of order {OrderId} by user {UpdatedBy}", id, updatedBy);
             return Result<OrderResponseDto>.Failure("Failed to update order.", StatusCodes.Status500InternalServerError);
         }
     }
