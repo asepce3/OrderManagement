@@ -41,6 +41,8 @@ public class OrderService : IOrderService
             Status = request.Status,
             StartDate = request.StartDate,
             EndDate = request.EndDate,
+            Direction = request.Direction,
+            SortDirection = request.SortDirection,
         };
 
         var orders = await _orderRepository.GetAllAsync(filter);

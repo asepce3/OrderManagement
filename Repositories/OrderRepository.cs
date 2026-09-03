@@ -23,11 +23,6 @@ public class OrderRepository : IOrderRepository
             .ThenInclude(d => d.Product)
             .AsQueryable();
 
-        if (filter.Cursor.HasValue)
-        {
-            query = query.Where(o => o.CreatedAt < filter.Cursor.Value);
-        }
-
         if (filter.UserId != null)
         {
             query = query.Where(o => o.UserId == filter.UserId);
@@ -48,8 +43,30 @@ public class OrderRepository : IOrderRepository
             query = query.Where(o => o.CreatedAt <= filter.EndDate);
         }
 
+        var sortDescending = string.Equals(filter.SortDirection, "desc", StringComparison.OrdinalIgnoreCase);
+        var isNext = string.Equals(filter.Direction, "next", StringComparison.OrdinalIgnoreCase);
+
+        if (filter.Cursor.HasValue)
+        {
+            if (sortDescending)
+            {
+                query = isNext
+                    ? query.Where(o => o.CreatedAt < filter.Cursor.Value)
+                    : query.Where(o => o.CreatedAt > filter.Cursor.Value);
+            }
+            else
+            {
+                query = isNext
+                    ? query.Where(o => o.CreatedAt > filter.Cursor.Value)
+                    : query.Where(o => o.CreatedAt < filter.Cursor.Value);
+            }
+        }
+
+        query = sortDescending
+            ? query.OrderByDescending(o => o.CreatedAt)
+            : query.OrderBy(o => o.CreatedAt);
+
         return await query
-            .OrderByDescending(o => o.CreatedAt)
             .Take(filter.PageSize ?? 20)
             .ToListAsync();
     }
